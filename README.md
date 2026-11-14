@@ -43,6 +43,7 @@
 
 - Репозиторий: [Degos-coder/OLEG-DMX-operator](https://github.com/Degos-coder/OLEG-DMX-operator).
 - [`PROJECT_DIRECTION.md`](PROJECT_DIRECTION.md) — цель, этапы развития и границы экспертных ролей.
+- [`UI_DESIGN_SPEC.md`](UI_DESIGN_SPEC.md) — критерии цвета, минимальных размеров и узкой компоновки.
 - [`CHANGELOG.md`](CHANGELOG.md) — история изменений.
 - [`CODEX_WORK_LOG.md`](CODEX_WORK_LOG.md) — журнал обзоров и правок, подготовленных Codex.
 
