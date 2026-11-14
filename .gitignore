@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+qt_preview.png
+qt_stage_preview.png
+# Written by Codex: keep local show data and interrupted saves out of Git.
+*.dmxshow
+*.dmxshow.bak
+*.tmp
