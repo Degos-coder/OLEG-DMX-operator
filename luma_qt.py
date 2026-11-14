@@ -2625,7 +2625,12 @@ class OlegWindow(QMainWindow):
             self._sync_stage_inspector()
 
     def _add_cue(self):
-        label_text, ok = self._ask_text("Новый snapshot", "Название:", f"Snapshot {len(self.show_data['cues']) + 1}")
+        label_text, ok = self._ask_text(
+            "Новый snapshot",
+            "Сохранит текущие уровни света всех приборов и активный план сцены.\n"
+            "Переход по умолчанию: 1 с.\nНазвание:",
+            f"Snapshot {len(self.show_data['cues']) + 1}",
+        )
         if not ok: return
         self._checkpoint()
         look = {f["id"]: copy.deepcopy(f.get("look", blank_look())) for f in self.show_data["fixtures"]}
@@ -2640,7 +2645,10 @@ class OlegWindow(QMainWindow):
 
     def _ask_text(self, title, prompt, initial=""):
         dialog = QDialog(self); dialog.setWindowTitle(title)
-        box = QVBoxLayout(dialog); box.addWidget(label(prompt))
+        box = QVBoxLayout(dialog)
+        prompt_label = label(prompt)
+        prompt_label.setWordWrap(True)
+        box.addWidget(prompt_label)
         editor = QLineEdit(initial); box.addWidget(editor)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept); buttons.rejected.connect(dialog.reject); box.addWidget(buttons)
