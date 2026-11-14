@@ -79,7 +79,10 @@ class ColorWheel(QWidget):
         self.setToolTip("Выберите оттенок и насыщенность на цветовом круге")
 
     def sizeHint(self):
-        return QSize(160, 150)
+        window = self.window()
+        scale = max(.75, min(1.45, float(getattr(window, "ui_scale", 1.0))))
+        diameter = max(112, round(160 * scale))
+        return QSize(diameter, diameter)
 
     def setColor(self, color):
         self._color = QColor(color)
@@ -94,9 +97,12 @@ class ColorWheel(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         wheel = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
-        hue = QConicalGradient(center, -90)
-        for stop, color in ((0, "#ff0000"), (1/6, "#ffff00"), (2/6, "#00ff00"),
-                            (3/6, "#00ffff"), (4/6, "#0000ff"), (5/6, "#ff00ff"), (1, "#ff0000")):
+        # QConicalGradient interpolates counter-clockwise. Start at the top
+        # and reverse the stops so its painted hue follows the clockwise
+        # screen-angle convention used by _choose_at().
+        hue = QConicalGradient(center, 90)
+        for stop, color in ((0, "#ff0000"), (1/6, "#ff00ff"), (2/6, "#0000ff"),
+                            (3/6, "#00ffff"), (4/6, "#00ff00"), (5/6, "#ffff00"), (1, "#ff0000")):
             hue.setColorAt(stop, QColor(color))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(hue)
@@ -178,7 +184,7 @@ class StageObject(QGraphicsObject):
             self._stage_label = QGraphicsSimpleTextItem(str(data.get("label", "Объект")), self)
             self._stage_label.setBrush(QColor("#f1f5fa"))
             font = QFont("Segoe UI")
-            font.setPixelSize(max(8, round(11 * label_scale)))
+            font.setPixelSize(max(10, round(11 * label_scale)))
             font.setWeight(QFont.Weight.DemiBold)
             self._stage_label.setFont(font)
             self._stage_label.setFlag(QGraphicsObject.GraphicsItemFlag.ItemIgnoresTransformations, True)
@@ -869,37 +875,64 @@ class OlegWindow(QMainWindow):
     def _build_header(self):
         panel = QFrame()
         panel.setObjectName("topbar")
-        row = QHBoxLayout(panel)
+        row = QGridLayout(panel)
         row.setContentsMargins(18, 12, 18, 12)
+        row.setHorizontalSpacing(8)
+        row.setVerticalSpacing(4)
         brand = label("OLEG", "brand")
-        row.addWidget(brand)
-        row.addWidget(label("DMX  /  ЖИВОЙ СВЕТ", "eyebrow"))
-        row.addStretch(1)
+        tagline = label("DMX  /  ЖИВОЙ СВЕТ", "eyebrow")
         self.show_name = label(self.show_data["name"], "showName")
-        row.addWidget(self.show_name)
         self.connection_badge = label("●  DMX ОТКЛЮЧЁН", "badge")
-        row.addWidget(self.connection_badge)
-        row.addWidget(button("Открыть", self._open_dialog))
+        self.open_button = button("Открыть", self._open_dialog)
         self.save_button = button("Сохранить", primary=True)
         self.save_button.clicked.connect(self._save_dialog)
-        row.addWidget(self.save_button)
         self.blackout_button = button("BLACKOUT", self._toggle_blackout, danger=True)
         self.blackout_button.setCheckable(True)
         self.blackout_button.setObjectName("blackoutButton")
         self.blackout_button.setProperty("pulse", "false")
-        row.addWidget(self.blackout_button)
-        row.addWidget(label("МАСШТАБ", "eyebrow"))
+        self.ui_scale_label = label("МАСШТАБ", "eyebrow")
         self.ui_scale_picker = QComboBox()
         self.ui_scale_picker.setToolTip("Размер интерфейса во всех вкладках · Ctrl +/− · Ctrl+0 — сброс")
         for percentage in (75, 85, 100, 115, 130, 145):
             self.ui_scale_picker.addItem(f"{percentage}%", percentage / 100)
-        row.addWidget(self.ui_scale_picker)
         self.ui_scale_picker.currentIndexChanged.connect(self._ui_scale_picked)
         self.new_button = button("Создать")
         self.new_button.setToolTip("Создать новое шоу")
         self.new_button.clicked.connect(self._new_show)
-        row.addWidget(self.new_button)
+        self._header_layout = row
+        self._header_brand = brand
+        self._header_tagline = tagline
+        self._header_primary = (brand, tagline, self.show_name, self.connection_badge, self.blackout_button)
+        self._header_secondary = (self.open_button, self.save_button, self.ui_scale_label,
+                                  self.ui_scale_picker, self.new_button)
+        self._header_is_compact = None
+        self._update_header_layout()
         return panel
+
+    def _update_header_layout(self):
+        if not hasattr(self, "_header_layout"):
+            return
+        compact = self.width() < round(1320 * getattr(self, "ui_scale", 1.0))
+        if compact == self._header_is_compact:
+            return
+        widgets = self._header_primary + self._header_secondary
+        for widget in widgets:
+            self._header_layout.removeWidget(widget)
+        if compact:
+            for column, widget in enumerate(self._header_primary):
+                self._header_layout.addWidget(widget, 0, column)
+            for column, widget in enumerate(self._header_secondary):
+                self._header_layout.addWidget(widget, 1, column)
+            self._header_layout.setColumnStretch(2, 1)
+        else:
+            for column, widget in enumerate(widgets):
+                self._header_layout.addWidget(widget, 0, column)
+            self._header_layout.setColumnStretch(2, 1)
+        self._header_is_compact = compact
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_header_layout()
 
     def _build_sidebar(self):
         panel = QFrame()
@@ -991,7 +1024,7 @@ class OlegWindow(QMainWindow):
         splitter.addWidget(center_frame)
 
         controls, controls_layout = self._panel("Программатор", "Текущие значения")
-        controls.setMinimumWidth(205)
+        controls.setMinimumWidth(254)
         controls.setMaximumWidth(450)
         controls_scroll = QScrollArea()
         controls_scroll.setWidgetResizable(True)
@@ -1332,6 +1365,24 @@ class OlegWindow(QMainWindow):
             max_h = round(maximum.height() * self.ui_scale) if maximum.height() < 100000 else maximum.height()
             widget.setMinimumSize(min_w, min_h)
             widget.setMaximumSize(max_w, max_h)
+        ordinary_button_height = max(30, round(34 * self.ui_scale))
+        important_button_height = max(40, round(40 * self.ui_scale))
+        for widget in self.findChildren(QPushButton):
+            is_important = (widget is getattr(self, "blackout_button", None)
+                            or widget.text().strip().casefold() == "fire")
+            target_height = important_button_height if is_important else ordinary_button_height
+            widget.setMinimumHeight(max(widget.minimumHeight(), target_height))
+        field_height = max(32, round(36 * self.ui_scale))
+        for widget_type in (QComboBox, QDoubleSpinBox, QLineEdit, QSpinBox):
+            for widget in self.findChildren(widget_type):
+                widget.setMinimumHeight(max(widget.minimumHeight(), field_height))
+        slider_height = max(24, round(28 * self.ui_scale))
+        for widget in self.findChildren(QSlider):
+            widget.setMinimumHeight(max(widget.minimumHeight(), slider_height))
+        if hasattr(self, "color_wheel"):
+            wheel_diameter = max(112, round(160 * self.ui_scale))
+            self.color_wheel.setMinimumSize(wheel_diameter, wheel_diameter)
+            self.color_wheel.updateGeometry()
         for layout, margins, spacing in self._ui_scale_layouts:
             layout.setContentsMargins(*(round(value * self.ui_scale) for value in
                                         (margins.left(), margins.top(), margins.right(), margins.bottom())))
@@ -1341,6 +1392,12 @@ class OlegWindow(QMainWindow):
             r"(?<![A-Za-z])(\d+(?:\.\d+)?)(px|pt)\b",
             lambda match: f"{float(match.group(1)) * self.ui_scale:g}{match.group(2)}",
             self._stylesheet(),
+        )
+        slider_handle_width = max(16, round(18 * self.ui_scale))
+        scaled_stylesheet = re.sub(
+            r"(QSlider::handle:horizontal\s*\{\s*width:\s*)\d+(?:\.\d+)?px",
+            lambda match: f"{match.group(1)}{slider_handle_width}px",
+            scaled_stylesheet,
         )
         self.setStyleSheet(scaled_stylesheet)
         screen = self.screen() or QApplication.primaryScreen()
@@ -1357,6 +1414,7 @@ class OlegWindow(QMainWindow):
         self.setMinimumSize(minimum_width, minimum_height)
         if not self.isMaximized():
             self.resize(requested_width, requested_height)
+        self._update_header_layout()
         if hasattr(self, "ui_scale_picker"):
             self.ui_scale_picker.blockSignals(True)
             index = min(range(self.ui_scale_picker.count()),
@@ -1636,7 +1694,17 @@ class OlegWindow(QMainWindow):
         inspector_layout.addStretch(1)
         self.delete_stage_button = button("Удалить объект", self._delete_stage, danger=True)
         inspector_layout.addWidget(self.delete_stage_button)
-        splitter.addWidget(inspector)
+        inspector.setObjectName("stageInspectorPanel")
+        inspector_scroll = QScrollArea()
+        inspector_scroll.setObjectName("stageInspectorScroll")
+        inspector_scroll.setWidgetResizable(True)
+        inspector_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        inspector_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        inspector_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        inspector_scroll.setMinimumWidth(245)
+        inspector_scroll.setMaximumWidth(460)
+        inspector_scroll.setWidget(inspector)
+        splitter.addWidget(inspector_scroll)
         splitter.setStretchFactor(0, 1); splitter.setStretchFactor(1, 0)
         splitter.setSizes([950, 280])
         self._connect_splitter(splitter)
